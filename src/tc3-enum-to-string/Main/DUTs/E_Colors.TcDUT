@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <DUT Name="E_Colors" Id="{a48d2ffa-3f17-471f-9487-08ea1d56fd53}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+{attribute 'test' := 'this'}
+TYPE E_Colors :
+(
+	RED := 0,
+	ORANGE,
+	YELLOW,
+	GREEN,
+	BLUE,
+	INDIGO,
+	VIOLET
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

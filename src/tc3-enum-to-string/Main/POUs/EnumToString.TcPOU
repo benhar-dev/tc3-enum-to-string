@@ -1,0 +1,280 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="EnumToString" Id="{cff2d9ca-0f30-4f3c-98e8-357a7485c5f4}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION EnumToString : T_MAXSTRING
+VAR_INPUT
+	Symbol : ANY;
+END_VAR
+VAR
+	hr : HRESULT;
+	appInfo : ITcIecApplicationInfo;
+
+	symbolNameLength : UDINT;	
+	pSymbolName : POINTER TO BYTE;
+	pSymbolNameAsString : POINTER TO STRING;
+	
+	symbolInfoLength : UDINT;
+	pSymbolInfo : POINTER TO BYTE;
+	
+	symbolInfoNameLength : UINT;
+	symbolInfoDatatypeLength : UINT;
+	symbolInfoDataTypeOffset : UINT;
+	
+	pDataTypeName : POINTER TO BYTE;
+	pDataTypeNameAsString : POINTER TO STRING;
+	
+	dataTypeInfoLength : UDINT;
+	pDataTypeInfo : POINTER TO BYTE;
+	
+	datatypeInfoEntryLength : UDINT;
+	datatypeInfoDatatypeSize : UDINT;
+	datatypeInfoNameLength : UINT;
+	datatypeInfoDatatypeLength : UINT;
+	datatypeInfoCommentLength : UINT;
+	
+	attributeCountOffset : UINT;
+	attributeCount : UINT;
+	attributeIndex : UINT;
+	attributeEntry : UINT;
+	attributeEntryNameLength : BYTE;
+	attributeEntryValueLength : BYTE;
+	
+	enumCountOffset : UINT;
+	enumCount : UINT;
+	enumIndex : UINT;
+	enumEntry : UINT;
+	enumStringLength : BYTE;
+	enumStringOffset : UINT;
+	enumDataOffset : UINT;
+
+END_VAR
+VAR CONSTANT
+	
+	SYMBOL_INFO_NAME_LENGTH_OFFSET : UINT := 16#18;
+	SYMBOL_INFO_DATATYPE_LENGTH_OFFSET : UINT := 16#1A;
+	SYMBOL_INFO_DATA_OFFSET : UINT := 16#1E;
+	
+	DATATYPE_ENTRY_LENGTH_OFFSET : UINT := 16#0;
+	DATATYPE_SIZE_OFFSET : UINT := 16#10;
+	DATATYPE_NAME_LENGTH_OFFSET : UINT := 16#20;
+	DATATYPE_TYPE_LENGTH_OFFSET : UINT := 16#22;
+	DATATYPE_COMMENT_LENGTH_OFFSET : UINT := 16#24;
+	DATATYPE_DATA_OFFSET : UINT := 16#2A;
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[REPEAT
+	
+	// if it's not an enum then exit
+	IF Symbol.TypeClass <> __SYSTEM.TYPE_CLASS.TYPE_ENUM THEN 
+		EXIT; 
+	END_IF
+	
+	// ------------------------------------------------
+	// Get the application info object
+	// ------------------------------------------------	
+	IF TwinCAT_SystemInfoVarList._AppInfo.ObjId = 0 THEN 
+		EXIT; 
+	END_IF
+
+	// get the application info object
+	hr := FW_ObjMgr_GetObjectInstance(TwinCAT_SystemInfoVarList._AppInfo.ObjId, TC_GLOBAL_IID_LIST.IID_ITcIecApplicationInfo, ADR(appInfo));
+	IF FAILED(hr) THEN 
+		EXIT; 
+	END_IF
+	
+	// ------------------------------------------------
+	// Get the symbol name based on the symbol address
+	// ------------------------------------------------
+	
+	// get the symbol name length
+	hr := appInfo.GetSymbolNameByAddress(0, Symbol.pValue, symbolNameLength, 0);
+	IF symbolNameLength = 0 THEN 
+		EXIT; 
+	END_IF
+	
+	// make string to hold the symbol name
+	pSymbolName := __NEW(BYTE,symbolNameLength);
+	
+	// get symbol name by address
+	hr := appInfo.GetSymbolNameByAddress(symbolNameLength, Symbol.pValue, symbolNameLength, pSymbolName);
+	IF FAILED(hr) THEN 
+		EXIT; 
+	END_IF
+	
+	// convert the pointer to a pointer to string;
+	pSymbolNameAsString := pSymbolName;
+	
+	// ------------------------------------------------
+	// Get the symbol infomation so we can get the type
+	// ------------------------------------------------
+	
+	// get the symbol info length
+	hr := appInfo.GetAdsSymbolInfo(pSymbolNameAsString^, symbolInfoLength, 0);
+	IF symbolInfoLength = 0 THEN 
+		EXIT; 
+	END_IF
+	
+	// make array to hold the symbol info
+	pSymbolInfo := __NEW(BYTE,symbolInfoLength);
+	
+	// get symbol info (so that we can get the symbol datatype name
+	hr := appInfo.GetAdsSymbolInfo(pSymbolNameAsString^, symbolInfoLength, pSymbolInfo);
+	IF FAILED(hr) THEN 
+		EXIT; 
+	END_IF
+	
+	// ------------------------------------------------
+	// Get the symbol datatype from the symbol info
+	// ------------------------------------------------	
+	
+	// get the length of the symbol name and datatype name from the symbol info		
+	memcpy(ADR(symbolInfoNameLength),ADR(pSymbolInfo[SYMBOL_INFO_NAME_LENGTH_OFFSET]),SIZEOF(UINT));
+	memcpy(ADR(symbolInfoDatatypeLength),ADR(pSymbolInfo[SYMBOL_INFO_DATATYPE_LENGTH_OFFSET]),SIZEOF(UINT));
+	
+	// check we have values
+	IF symbolInfoNameLength = 0 OR symbolInfoDatatypeLength = 0 THEN 
+		EXIT; 
+	END_IF
+	
+	// calculate the offset to the datatype name as this depends on the symbol name
+	symbolInfoDataTypeOffset := SYMBOL_INFO_DATA_OFFSET 
+		+ symbolInfoNameLength + 1;
+		
+	// create a variable to store the datatype name
+	pDataTypeName := __NEW(BYTE, symbolInfoDatatypeLength);
+	
+	// copy out the symbol name in to a variable
+	memcpy(pDataTypeName,ADR(pSymbolInfo[symbolInfoDataTypeOffset]),symbolInfoDatatypeLength + 1);
+	
+	// convert the pointer to a pointer to string;
+	pDataTypeNameAsString := pDataTypeName;
+
+	// ---------------------------------------------------
+	// Get the datatype info now we have the datatype name
+	// ---------------------------------------------------
+	
+	// the datatype info is of variable length, so first get the length	
+	appInfo.GetAdsDatatypeInfo(pDataTypeNameAsString^, dataTypeInfoLength, 0);
+	IF dataTypeInfoLength = 0 THEN 
+		EXIT; 
+	END_IF
+	
+	// make a byte array to hold the datatype info
+	pDataTypeInfo := __NEW(BYTE,dataTypeInfoLength);
+	
+	// get datatype info
+	hr := appInfo.GetAdsDatatypeInfo(pDataTypeNameAsString^, dataTypeInfoLength, pDataTypeInfo);
+	IF FAILED(hr) THEN 
+		EXIT; 
+	END_IF
+	
+	// ---------------------------------------------------
+	// find the start of the enum data
+	// ---------------------------------------------------
+	
+	// get known datapoints of the datatype info
+	memcpy(ADR(datatypeInfoEntryLength),ADR(pDataTypeInfo[DATATYPE_ENTRY_LENGTH_OFFSET]),SIZEOF(UDINT));
+	memcpy(ADR(datatypeInfoDatatypeSize),ADR(pDataTypeInfo[DATATYPE_SIZE_OFFSET]),SIZEOF(UDINT));
+	memcpy(ADR(datatypeInfoNameLength),ADR(pDataTypeInfo[DATATYPE_NAME_LENGTH_OFFSET]),SIZEOF(UINT));
+	memcpy(ADR(datatypeInfoDatatypeLength),ADR(pDataTypeInfo[DATATYPE_TYPE_LENGTH_OFFSET]),SIZEOF(UINT));
+	memcpy(ADR(datatypeInfoCommentLength),ADR(pDataTypeInfo[DATATYPE_COMMENT_LENGTH_OFFSET]),SIZEOF(UINT));
+	
+	// locate the start of the attribute area (this is after the name, type, guid and compiler attributes
+	attributeCountOffset := DATATYPE_DATA_OFFSET 
+		+ datatypeInfoNameLength + 1 
+		+ datatypeInfoDatatypeLength + 1 
+		+ datatypeInfoCommentLength + 1 
+		+ SIZEOF(guid);
+	
+	// get attribute count
+	MEMCPY(ADR(attributeCount), ADR(pDataTypeInfo[attributeCountOffset]), SIZEOF(UINT));
+	
+	// pass over each attribute to find the enum area which follows
+	attributeIndex := attributeCountOffset + SIZEOF(attributeCount);	
+	attributeEntry := 1;
+	WHILE attributeEntry <= attributeCount  DO	
+	
+		// add the attribute name length and value length to the index
+		attributeEntryNameLength :=  pDataTypeInfo[attributeIndex];
+		attributeEntryValueLength :=  pDataTypeInfo[attributeIndex+1];
+		attributeIndex := attributeIndex 
+			+ SIZEOF(BYTE) // attribute name length
+			+ SIZEOF(BYTE) // attribute value lenth
+			+ attributeEntryNameLength + 1 // attribute name actual length with null
+			+ attributeEntryValueLength + 1; // attribute value actual length with null
+			
+		// next entry
+		attributeEntry := attributeEntry + 1;
+	
+	END_WHILE	
+	
+	enumCountOffset := attributeIndex;
+	
+	// ---------------------------------------------------
+	// find matching enum and retreive related string
+	// ---------------------------------------------------
+		
+	// get enum count
+	MEMCPY(ADR(enumCount), ADR(pDataTypeInfo[enumCountOffset]), SIZEOF(UINT));
+	
+	// pass over each enum to check if match for symbol data
+	enumIndex := enumCountOffset + SIZEOF(enumCountOffset);	
+	enumEntry := 1;
+	WHILE enumEntry <= enumCount  DO	
+	
+		enumStringLength := pDataTypeInfo[enumIndex];
+		
+		enumStringOffset := enumIndex 
+			+ SIZEOF(BYTE);
+			
+		enumDataOffset := enumStringOffset
+			+ enumStringLength + 1;		
+
+		enumIndex := enumDataOffset
+			+ UDINT_TO_UINT(datatypeInfoDatatypeSize);
+			
+		IF memcmp(ADR(pDataTypeInfo[enumDataOffset]),symbol.pValue,DINT_TO_UDINT(symbol.diSize)) = 0 THEN
+			memcpy(ADR(EnumToString),ADR(pDataTypeInfo[enumStringOffset]),MIN(SIZEOF(EnumToString), enumStringLength + 1));
+			EXIT;	
+		END_IF
+			
+		// next entry
+		enumEntry := enumEntry + 1;
+	
+	END_WHILE	
+	
+	// if here is reached then there was no match.
+	
+UNTIL TRUE // this allows us to exit out of the repeat at any point.
+END_REPEAT
+
+// tidy app info before leaving
+FW_SafeRelease(ADR(appInfo));
+
+// tidy symbol name before leaving
+IF pSymbolName <> 0 THEN
+	__DELETE(pSymbolName);
+END_IF
+
+// tidy the symbol info before leaving
+IF pSymbolInfo <> 0 THEN
+	__DELETE(pSymbolInfo);
+END_IF
+
+// tidy the datatype name before leaving
+IF pDataTypeName <> 0 THEN
+	__DELETE(pDataTypeName);
+END_IF
+
+// tidy the datatype info before leaving
+IF pDataTypeInfo <> 0 THEN
+	__DELETE(pDataTypeInfo);
+END_IF
+
+RETURN;
+
+// can be the following types | INT | UINT | SINT | USINT | DINT | UDINT | LINT | ULINT | BYTE | WORD | DWORD | LWORD |]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

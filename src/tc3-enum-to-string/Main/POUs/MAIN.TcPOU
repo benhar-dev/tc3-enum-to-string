@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="MAIN" Id="{a7db74a5-540d-4041-b693-22c9578519b3}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM MAIN
+VAR
+	
+	color : E_Colors := E_Colors.BLUE;
+	colorEnumAsString : T_MAXSTRING;
+	
+	colorMap : ETcVnColorMap := Tc3_Vision.ETcVnColorMap.TCVN_CM_AUTUMN;
+	colorMapEnumAsString : T_MAXSTRING;
+	
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[colorEnumAsString := EnumToString(color);
+colorMapEnumAsString := EnumToString(colorMap);]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>
